@@ -32,6 +32,8 @@ seo-agent/                 # «мозг» (Python), запускается в Gi
   modules/                 # M1–M6, дайджест дня, стратег, недельный разбор, клиенты API
   notifiers/               # Telegram + «человеческий язык» (humanize)
   scripts/ping_new_urls.py # пинг переобхода после публикации
+  scripts/audit_indexability.py # разовая проверка: robots / sitemap / canonical / noindex / дубли
+  tests/                   # unit-тесты проверок (python3 -m unittest discover -s tests)
 content-factory/           # генератор статей (бриф → текст → редактура через Claude)
   prompts/                 # ШАБЛОНЫ промптов — адаптируйте под свою нишу
 .github/workflows/         # расписания (cron) + ручной запуск
@@ -43,6 +45,7 @@ content-factory/           # генератор статей (бриф → те�
 | `orchestrator.py m3` | трекинг позиций (Google + Яндекс) | ежедневно 06:00 |
 | `orchestrator.py m2` | технический аудит + Core Web Vitals | сб 07:00 |
 | `orchestrator.py m1` | семантика → темы для фабрики | вс 04:00 |
+| `orchestrator.py indexability` | robots.txt, sitemap, canonical, noindex, дубли URL | 1-го числа 08:00 + вручную |
 | `orchestrator.py digest` | недельный разбор | пн 11:00 |
 | контент-фабрика | 5 статей/день (Batch API, −50%) | ежедневно 09:00 |
 
@@ -79,6 +82,35 @@ content-factory/           # генератор статей (бриф → те�
    и запусти dry-run: `cd seo-agent && python3 orchestrator.py daily --dry-run`.
    Покажи результат. Если зелёное — расписания уже работают, отчёты пойдут утром.
 ````
+
+---
+
+## Проверка индексируемости (robots / sitemap / canonical / noindex / дубли)
+
+Отдельный прогон, который отвечает на пять вопросов приёмки сайта:
+
+```bash
+cd seo-agent
+python3 scripts/audit_indexability.py --site https://ваш-сайт.ru --limit 40
+```
+
+| Блок | Что ищет |
+|---|---|
+| robots.txt | есть ли файл; `Disallow: /`; закрытые важные разделы; отдельная секция `User-agent: Yandex`, которая строже общей; закрытые css/js; директива `Sitemap`; устаревший `Host`; большой `Crawl-delay` |
+| sitemap.xml | найдена ли карта (в robots.txt и по типовым адресам); валидна ли; знает ли о ней **Яндекс.Вебмастер** (нужен `YANDEX_WEBMASTER_TOKEN`); чужие домены, http-адреса, повторы, URL, закрытые в robots.txt |
+| canonical | нет тега; чужой домен; другой протокол/www/слеш; ссылка на другую страницу; цепочка canonical; canonical на редирект, битый адрес или страницу с noindex |
+| noindex | `<meta name="robots">`, `<meta name="yandex">` **и HTTP-заголовок `X-Robots-Tag`** (его не видно в HTML); связка noindex + Disallow, при которой страница остаётся в выдаче |
+| дубли URL | зеркала http/https, www/без www, `/index.php`, лишний слеш, utm-метки; одинаковый текст, title или description на разных адресах |
+
+Отчёт: `seo-agent/data/audits/YYYY-MM-DD/indexability.{md,json}`.
+Тот же набор проверок автоматически входит в еженедельный `orchestrator.py m2`,
+а вручную запускается через Actions → «seo-agent · индексируемость».
+
+Проверки покрыты тестами без обращения к сети:
+
+```bash
+cd seo-agent && python3 -m unittest discover -s tests
+```
 
 ---
 

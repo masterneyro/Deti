@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -32,6 +33,20 @@ def cmd_m1(args: argparse.Namespace) -> int:
 def cmd_m2(args: argparse.Namespace) -> int:
     from modules import m2_audit
     m2_audit.run_audit(dry_run=args.dry_run, skip_psi=args.skip_psi)
+    return 0
+
+
+def cmd_indexability(args: argparse.Namespace) -> int:
+    """robots.txt / sitemap.xml / canonical / noindex / дубли URL — отдельным прогоном."""
+    from scripts import audit_indexability
+    site = args.site or os.environ.get("M2_SITE_ROOT", "")
+    if not site or "example.com" in site:
+        logging.error("Укажите домен: --site https://ваш-сайт.ru (или задайте M2_SITE_ROOT)")
+        return 2
+    payload = audit_indexability.run(site, args.limit, args.skip_yandex, args.skip_mirrors)
+    md_path = audit_indexability.save(payload)
+    print(audit_indexability.render_console(payload))
+    print(f"\nОтчёт: {md_path}")
     return 0
 
 
@@ -82,6 +97,7 @@ COMMANDS = {
     "m1": cmd_m1,
     "m2": cmd_m2,
     "m3": cmd_m3,
+    "indexability": cmd_indexability,
     "m4": cmd_m4,
     "m5": cmd_m5,
     "m6": cmd_m6,
@@ -102,6 +118,14 @@ def main() -> int:
                         help="(M4) Сканировать статьи с этой даты (ISO YYYY-MM-DD)")
     parser.add_argument("--top-n-issues", type=int, default=5,
                         help="(M4) Сколько worst-articles обработать (открыть Issues)")
+    parser.add_argument("--site", type=str, default=None,
+                        help="(indexability) Корень сайта, например https://site.ru")
+    parser.add_argument("--limit", type=int, default=40,
+                        help="(indexability) Сколько страниц из карты обойти")
+    parser.add_argument("--skip-yandex", action="store_true",
+                        help="(indexability) Не ходить в API Яндекс.Вебмастера")
+    parser.add_argument("--skip-mirrors", action="store_true",
+                        help="(indexability) Не проверять зеркала главной")
     args = parser.parse_args()
 
     logging.basicConfig(

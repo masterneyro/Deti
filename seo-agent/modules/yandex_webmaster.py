@@ -163,6 +163,36 @@ def yw_resolve_host_id(user_id: Optional[int] = None, host_url: str = "example.c
     return user_id, matches[0]["host_id"]
 
 
+def yw_list_sitemaps(user_id: int, host_id: str) -> list[dict]:
+    """Карты сайта, которые Яндекс нашёл сам (robots.txt + добавленные ранее).
+
+    Поля записи: sitemap_id, sitemap_url, last_access_date, errors, urls_count.
+    Docs: https://yandex.ru/dev/webmaster/doc/dg/reference/host-sitemaps.html
+    """
+    data = _get(f"/user/{user_id}/hosts/{quote(host_id, safe='')}/sitemaps/")
+    return data.get("sitemaps", [])
+
+
+def yw_list_user_added_sitemaps(user_id: int, host_id: str) -> list[dict]:
+    """Карты, добавленные вручную в интерфейсе Вебмастера.
+
+    Docs: https://yandex.ru/dev/webmaster/doc/dg/reference/host-user-added-sitemaps.html
+    """
+    data = _get(f"/user/{user_id}/hosts/{quote(host_id, safe='')}/user-added-sitemaps/")
+    return data.get("sitemaps", [])
+
+
+def yw_add_sitemap(user_id: int, host_id: str, sitemap_url: str) -> dict:
+    """Добавить карту сайта в Яндекс.Вебмастер (если её там нет).
+
+    Docs: https://yandex.ru/dev/webmaster/doc/dg/reference/host-user-added-sitemap-add.html
+    """
+    return _post(
+        f"/user/{user_id}/hosts/{quote(host_id, safe='')}/user-added-sitemaps/",
+        {"url": sitemap_url},
+    )
+
+
 def yw_sqi_history(user_id: int, host_id: str, date_from: str, date_to: str) -> list[dict]:
     """История ИКС (индекса качества сайта) по датам."""
     params = {"date_from": date_from, "date_to": date_to}

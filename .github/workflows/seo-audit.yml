@@ -61,6 +61,10 @@ jobs:
       - name: Run M2 tech audit
         working-directory: seo-agent
         env:
+          # Без M2_SITE_ROOT модуль уходит на example.com — подставьте свой домен.
+          M2_SITE_ROOT: https://example.com
+          SEO_SITE_DOMAIN: example.com
+          YANDEX_WEBMASTER_TOKEN: ${{ secrets.YANDEX_WEBMASTER_TOKEN }}
           PSI_API_KEY: ${{ secrets.PSI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

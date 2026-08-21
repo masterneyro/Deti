@@ -1,0 +1,123 @@
+name: seo-agent · индексируемость (robots / sitemap / canonical / noindex / дубли)
+
+# Разовая проверка «пускают ли роботы»: robots.txt, карта сайта (включая факт
+# отправки в Яндекс.Вебмастер), canonical, noindex и дубли URL.
+# Запускается вручную из вкладки Actions + раз в месяц, 1-го числа 05:00 UTC = 08:00 МСК.
+
+on:
+  schedule:
+    - cron: "0 5 1 * *"
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Корень сайта, например https://site.ru (пусто — берётся M2_SITE_ROOT)"
+        required: false
+        default: ""
+      limit:
+        description: "Сколько страниц из карты обойти"
+        required: false
+        default: "40"
+      skip_yandex:
+        description: "Не ходить в API Яндекс.Вебмастера (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seo-agent-indexability
+  cancel-in-progress: false
+
+jobs:
+  indexability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: seo-agent/requirements.txt
+
+      - name: Install dependencies
+        working-directory: seo-agent
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install lxml
+
+      - name: Unit-тесты проверок
+        working-directory: seo-agent
+        run: python3 -m unittest discover -s tests
+
+      - name: Проверка индексируемости
+        working-directory: seo-agent
+        env:
+          # Свой домен: подставьте здесь или передайте входом site при ручном запуске.
+          M2_SITE_ROOT: https://example.com
+          YANDEX_WEBMASTER_TOKEN: ${{ secrets.YANDEX_WEBMASTER_TOKEN }}
+          SITE_INPUT: ${{ github.event.inputs.site }}
+          LIMIT: ${{ github.event.inputs.limit || '40' }}
+          SKIP_YANDEX: ${{ github.event.inputs.skip_yandex || 'false' }}
+        run: |
+          SITE="${SITE_INPUT:-$M2_SITE_ROOT}"
+          ARGS="--site $SITE --limit $LIMIT"
+          if [ "$SKIP_YANDEX" = "true" ]; then ARGS="$ARGS --skip-yandex"; fi
+          # Ненулевой код возврата = найдены критичные проблемы; отчёт всё равно нужен.
+          python3 scripts/audit_indexability.py $ARGS || echo "INDEXABILITY_CRITICAL=1" >> "$GITHUB_ENV"
+
+      - name: Отчёт в Telegram
+        if: always()
+        working-directory: seo-agent
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then echo "Telegram не настроен, пропускаю"; exit 0; fi
+          python3 - <<'PY'
+          import glob, json, os, collections
+          from notifiers.humanize import check_ru, severity_label, short_url
+          from notifiers.telegram import send_telegram
+
+          files = sorted(glob.glob("data/audits/*/indexability.json"))
+          if not files:
+              print("Нет отчёта, нечего отправлять")
+              raise SystemExit(0)
+          data = json.loads(open(files[-1], encoding="utf-8").read())
+          issues = data["issues"]
+          counts = collections.Counter(i["severity"] for i in issues)
+          site = data["site"].replace("https://", "")
+
+          lines = [f"🔎 Проверка индексации · {site} · {data['date']}"]
+          if not issues:
+              lines.append("\n✅ robots.txt, карта сайта, canonical, noindex и дубли — без замечаний.")
+          else:
+              lines.append("\n" + " · ".join(f"{severity_label(s)} — {counts[s]}"
+                                             for s in ("critical", "high", "medium", "low") if counts[s]))
+              important = [i for i in issues if i["severity"] in ("critical", "high")]
+              if important:
+                  lines.append("\nЧто чинить в первую очередь:")
+                  for i in important[:12]:
+                      lines.append(f"  • {check_ru(i['check'])} — {short_url(i['url'])}")
+                  if len(important) > 12:
+                      lines.append(f"  …и ещё {len(important) - 12}")
+              lines.append("\nПодробности — в артефакте запуска (indexability.md).")
+          send_telegram("\n".join(lines))
+          PY
+
+      - name: Upload отчёт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: indexability-${{ github.run_id }}
+          path: seo-agent/data/audits/
+          retention-days: 30
+          if-no-files-found: warn

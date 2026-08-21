@@ -38,6 +38,7 @@ class CrawlResult:
     redirects: list[str] = field(default_factory=list)
     html: Optional[str] = None
     content_type: str = ""
+    headers: dict = field(default_factory=dict)
     elapsed_ms: int = 0
     error: Optional[str] = None
 
@@ -83,6 +84,7 @@ def crawl(url: str, timeout: int = DEFAULT_TIMEOUT) -> CrawlResult:
             redirects=[h.url for h in response.history],
             html=response.text if is_html else None,
             content_type=content_type,
+            headers={k.lower(): v for k, v in response.headers.items()},
             elapsed_ms=elapsed_ms,
         )
     except requests.RequestException as e:

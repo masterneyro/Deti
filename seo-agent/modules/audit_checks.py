@@ -77,6 +77,14 @@ def check_canonical(url: str, soup: BeautifulSoup) -> list[Issue]:
         path = p.path.rstrip("/") or "/"
         return f"{p.scheme}://{p.netloc}{path}"
 
+    def host(u: str) -> str:
+        h = (urlparse(u).netloc or "").lower()
+        return h[4:] if h.startswith("www.") else h
+
+    if canonical.startswith("http") and host(canonical) != host(url):
+        return [Issue(url, "canonical_foreign_domain", "critical",
+                      f"canonical ведёт на другой домен: {canonical}")]
+
     if norm(canonical) != norm(url):
         return [Issue(url, "canonical_mismatch", "critical",
                       f"canonical={canonical} ≠ url={url}")]
@@ -115,6 +123,18 @@ def check_meta_robots(url: str, soup: BeautifulSoup) -> list[Issue]:
         if "noindex" in content:
             return [Issue(url, "noindex_on_public_page", "critical",
                           f"meta robots={content!r} на странице, которая должна индексироваться")]
+    return []
+
+
+def check_x_robots_tag(url: str, headers: dict) -> list[Issue]:
+    """noindex может стоять в HTTP-заголовке — в HTML его не видно, ловим отдельно."""
+    NOINDEX_PATHS_OK = {"/policy", "/soglasie", "/offer", "/litsenziya", "/thanks"}
+    if urlparse(url).path.rstrip("/") in {p.rstrip("/") for p in NOINDEX_PATHS_OK}:
+        return []
+    value = (headers or {}).get("x-robots-tag", "")
+    if value and re.search(r"\bnoindex\b|\bnone\b", value, re.I):
+        return [Issue(url, "noindex_http_header", "critical",
+                      f"HTTP-заголовок X-Robots-Tag: {value} — запрет индексации на уровне сервера")]
     return []
 
 
@@ -178,9 +198,10 @@ def check_redirects(url: str, final_url: str, redirects: list[str]) -> list[Issu
 
 # ───── Прогон по странице ────────────────────────────────────────────
 
-def run_page_checks(url: str, html: str) -> list[Issue]:
+def run_page_checks(url: str, html: str, headers: dict | None = None) -> list[Issue]:
     soup = BeautifulSoup(html, "html.parser")
     issues: list[Issue] = []
+    issues.extend(check_x_robots_tag(url, headers or {}))
     issues.extend(check_title(url, soup))
     issues.extend(check_description(url, soup))
     issues.extend(check_canonical(url, soup))

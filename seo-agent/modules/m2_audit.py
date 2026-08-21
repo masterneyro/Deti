@@ -29,6 +29,7 @@ from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 # Делаем модуль запускаемым и из seo-agent/, и из корня репо
 THIS_DIR = Path(__file__).resolve().parent
@@ -43,6 +44,7 @@ from modules.audit_checks import (  # noqa: E402
     check_redirects,
 )
 from modules.pagespeed import psi_run, psi_summary  # noqa: E402
+from modules import indexability as ix  # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +76,28 @@ THRESHOLDS = {
 
 # ───── HTML-фаза ────────────────────────────────────────────────────
 
+def run_indexability_audit() -> tuple[list[Issue], ix.RobotsTxt]:
+    """robots.txt, карта сайта, зеркала главной. ~15 запросов, гоняем до краулинга.
+
+    Проверки живут в modules/indexability.py; здесь только приводим Issue к типу M2.
+    """
+    robots = ix.load_robots(SITE_ROOT)
+    sitemap = ix.load_sitemaps(SITE_ROOT, robots)
+    sitemap_paths = sorted({
+        "/" + (urlparse(u).path or "/").strip("/").split("/")[0] for u in sitemap.urls
+    } - {"/"})
+
+    raw: list = []
+    raw += ix.check_robots(robots, SITE_ROOT, sample_paths=sitemap_paths)
+    raw += ix.check_sitemap(sitemap, robots, SITE_ROOT, today=dt.date.today().isoformat())
+    _, yandex_issues = ix.check_yandex_sitemap_submission(SITE_ROOT)
+    raw += yandex_issues
+    _, mirror_issues = ix.check_mirrors(SITE_ROOT)
+    raw += mirror_issues
+
+    return [Issue(i.url, i.check, i.severity, i.detail) for i in raw], robots
+
+
 def run_html_audit() -> tuple[list[Issue], list]:
     """Краулинг + все per-page и global проверки. Возвращает (issues, crawl_results)."""
     log.info("Качаю sitemap %s", SITEMAP_URL)
@@ -95,7 +119,7 @@ def run_html_audit() -> tuple[list[Issue], list]:
             issues.append(Issue(cr.url, "http_4xx", "high", f"HTTP {cr.status}"))
             continue
         if cr.html:
-            issues.extend(run_page_checks(cr.url, cr.html))
+            issues.extend(run_page_checks(cr.url, cr.html, cr.headers))
         issues.extend(check_redirects(cr.url, cr.final_url, cr.redirects))
 
     # Глобальные проверки
@@ -326,7 +350,12 @@ def run_audit(dry_run: bool = False, skip_psi: bool = False) -> Path:
     today = dt.date.today().isoformat()
     log.info("=== M2 tech audit · %s ===", today)
 
+    log.info("Проверяю индексируемость: robots.txt, карта сайта, зеркала")
+    index_issues, _robots = run_indexability_audit()
+    log.info("Индексируемость: %d замечаний", len(index_issues))
+
     html_issues, crawl_results = run_html_audit()
+    html_issues = index_issues + html_issues
     stats = crawl_stats(crawl_results)
 
     psi_results: dict = {}
