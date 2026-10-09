@@ -29,7 +29,7 @@
 ```
 seo-agent/                 # «мозг» (Python), запускается в GitHub Actions
   orchestrator.py          # единая точка входа: python orchestrator.py <команда>
-  modules/                 # M1–M6, дайджест дня, стратег, недельный разбор, клиенты API
+  modules/                 # M1–M7, дайджест дня, стратег, недельный разбор, клиенты API
   notifiers/               # Telegram + «человеческий язык» (humanize)
   scripts/ping_new_urls.py # пинг переобхода после публикации
 content-factory/           # генератор статей (бриф → текст → редактура через Claude)
@@ -43,6 +43,7 @@ content-factory/           # генератор статей (бриф → те�
 | `orchestrator.py m3` | трекинг позиций (Google + Яндекс) | ежедневно 06:00 |
 | `orchestrator.py m2` | технический аудит + Core Web Vitals | сб 07:00 |
 | `orchestrator.py m1` | семантика → темы для фабрики | вс 04:00 |
+| `orchestrator.py m7` | охват: YouTube + Instagram, конкуренты, топ ниши, идеи от Claude | пт 10:00 |
 | `orchestrator.py digest` | недельный разбор | пн 11:00 |
 | контент-фабрика | 5 статей/день (Batch API, −50%) | ежедневно 09:00 |
 
@@ -93,6 +94,10 @@ content-factory/           # генератор статей (бриф → те�
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | доставка отчётов | @BotFather; chat_id — @userinfobot |
 | `TOPVISOR_*` *(опц.)* | позиции в Яндексе | topvisor.com → Настройки → API |
 | `INDEXNOW_KEY` *(опц.)* | быстрая индексация | сгенерируйте ключ, положите в `public/<key>.txt` |
+| `YOUTUBE_API_KEY` / `YOUTUBE_CHANNEL_ID` *(опц.)* | M7: охват YouTube | Google Cloud Console → YouTube Data API v3; id канала `UC…` |
+| `INSTAGRAM_USER_ID` / `INSTAGRAM_ACCESS_TOKEN` *(опц.)* | M7: охват Instagram | developers.facebook.com → Instagram Graph API (нужен бизнес/автор-аккаунт, привязанный к странице Facebook) |
+
+Кого смотреть в YouTube/Instagram (конкуренты, поисковые запросы, хэштеги) — в `seo-agent/data/reach/sources.json`.
 
 Per-сайт (в workflow, не секреты): `GSC_SITE_URL`, `SEO_SITE_DOMAIN`, `M2_SITE_ROOT`.
 

@@ -1,0 +1,79 @@
+name: seo-agent · M7 reach (YouTube + Instagram)
+
+# M7 — раз в неделю смотрит наш YouTube-канал и Instagram, конкурентов и топ ниши,
+# Claude предлагает идеи роликов/постов. Отчёт — в Telegram.
+# Cron: пятница 07:00 UTC = 10:00 МСК.
+
+on:
+  schedule:
+    - cron: "0 7 * * 5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "dry-run (без Telegram)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: seo-agent-reach
+  cancel-in-progress: false
+
+jobs:
+  reach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: seo-agent/requirements.txt
+
+      - name: Install dependencies
+        working-directory: seo-agent
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Configure git author
+        run: |
+          git config user.email "bot@example.com"
+          git config user.name "seo-agent"
+
+      - name: Run M7 (reach)
+        working-directory: seo-agent
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          ARGS=""
+          if [ "$DRY_RUN" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          python3 orchestrator.py m7 $ARGS
+
+      - name: Commit & push снимок
+        if: success()
+        run: |
+          git add seo-agent/data/reach/*.json || true
+          if ! git diff --staged --quiet; then
+            git commit -m "seo-agent: reach $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "Нет изменений"
+          fi

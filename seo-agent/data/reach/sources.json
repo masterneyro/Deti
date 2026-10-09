@@ -1,0 +1,13 @@
+{
+  "_comment": "Кого смотрит M7 (reach). Наш канал/аккаунт — через секреты YOUTUBE_CHANNEL_ID и INSTAGRAM_USER_ID. Здесь — конкуренты и ниша. YouTube-канал: id ('UC…') или handle ('@name'). Instagram: только бизнес/автор-аккаунты, не больше 30 хэштегов в неделю.",
+  "youtube": {
+    "channels": [
+      {"name": "Пример конкурента", "handle": ""}
+    ],
+    "queries": []
+  },
+  "instagram": {
+    "accounts": [],
+    "hashtags": []
+  }
+}

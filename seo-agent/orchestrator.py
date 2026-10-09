@@ -1,7 +1,7 @@
 """
 seo-agent · orchestrator
 
-Единая точка входа для запуска модулей M1–M6.
+Единая точка входа для запуска модулей M1–M7.
 
 Запуск:
     python3 orchestrator.py m2                  # технический аудит
@@ -59,6 +59,12 @@ def cmd_m6(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_m7(args: argparse.Namespace) -> int:
+    from modules import m7_reach
+    m7_reach.run_reach(dry_run=args.dry_run)
+    return 0
+
+
 def cmd_digest(args: argparse.Namespace) -> int:
     from modules import weekly_digest
     weekly_digest.run_digest(dry_run=args.dry_run)
@@ -85,6 +91,7 @@ COMMANDS = {
     "m4": cmd_m4,
     "m5": cmd_m5,
     "m6": cmd_m6,
+    "m7": cmd_m7,
     "digest": cmd_digest,
     "daily": cmd_daily,
 }
